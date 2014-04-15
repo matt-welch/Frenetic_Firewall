@@ -18,18 +18,23 @@ class firewall(DynamicPolicy)
         self.firewall = {}
         super(firewall,self).__init__(true)
 
-    def AddRule(self, ip1, ip2, port1, port2):
-        self.firewall[(ip1, ip2, port1, port2)] = true
+    def AddRule(self, ip1, port1, ip2, port2):
+        self.firewall[(ip1, port1, ip2, port2)] = True
         print "Adding Firewall rule in %s:%s -  %s:%s" % (ip1 , port1 , ip2 , port2)
 	self.update_policy()
 
     def update_policy(self):
         
-        #select traffic to flood?
-        #self.policy = union([...
-        #select traffic to filter?
-	#self.filter(~union([...
+        select allowed traffic
+        self.policy = union([ match(srcip=ip1) & match(srcport=port1) 
+			    & match(dstip=ip2) & match(dstport=port2) 
+			    for (ip1, port1, ip2, port2)
+			    in self.firewall.keys() ])
         print self.policy
 
 def main(configuration=""):
+	# read config file
+	# for everline in config file
+	# call AddRule(dstip, dstport, srcport, srcport)
+	
 	return firewall >> flood()
