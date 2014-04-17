@@ -19,7 +19,11 @@ class firewall(DynamicPolicy):
         self.firewall = {}
         super(firewall,self).__init__(true)
 		# 0.0.0.0/0 is the wildcard for the ANY IP address match
-        self.AddRule('10.0.0.1',5555,'10.0.0.2',555)
+        self.AddRule('10.0.0.1',1111,'10.0.0.2',2222)
+        self.AddRule('10.0.0.3',3333,'10.0.0.4',4444)
+        self.AddRule('10.0.0.5',5555,'any','any')
+        self.AddRule('10.0.0.5','any','any','any')
+
         self.update_policy()
     def AddRule(self, ip1, port1, ip2, port2):
         self.firewall[(ip1, port1, ip2, port2)] = True
@@ -31,24 +35,23 @@ class firewall(DynamicPolicy):
 		#
 		#if(ip1=='any'): ip1='0.0.0.0/0'
 
-        protomatch = match(protocol=pkt.ipv4.TCP_PROTOCOL ) & match(dstport=port2) &
-            match(ethtype=pkt.ethernet.IP_TYPE)
-        for (ip1, port1, ip2, port2) in self.firewall.keys() 
+        protomatch = match(protocol=pkt.ipv4.TCP_PROTOCOL ) & match(ethtype=pkt.ethernet.IP_TYPE)
+        for (ip1, port1, ip2, port2) in self.firewall.keys(): 
             # new policy is initially a basic policy matching only on protocols
             newpolicy = protomatch
 
             # build a new policy
             if(ip1 != 'any'):
                 newpolicy = newpolicy & match(srcip=ip1)
-            if(srcport != 'any'):
+            if(port1 != 'any'):
                 newpolicy = newpolicy & match(srcport=port1)
             if(ip2 != 'any'):
                 newpolicy = newpolicy & match(dstip=ip2)
-            if(dstport != 'any'):
+            if(port2 != 'any'):
                 newpolicy = newpolicy & match(dstport=port2)
     
             # join with the old policy
-            self.policy = union([ newpolicy & policy ])
+            self.policy = union([ newpolicy + self.policy ])
         print self.policy
 
 def main(configuration=""):
