@@ -15,7 +15,7 @@ OFPP_NORMAL = 0xfffa    # Process with normal L2/L3 switching.
 class firewall(DynamicPolicy):
     def __init__(self):
         #Initialize the firewall
-        print "initializing firewall"
+        print "__init__(): initializing firewall"
         self.firewall = {}
         super(firewall,self).__init__(true)
 
@@ -24,28 +24,28 @@ class firewall(DynamicPolicy):
         fin = open(config)
         for line in fin:
             rule = line.split()
-            print rule
+            print "__init__(): \n", rule
             if rule[1] != 'any':
                 rule[1] = int(rule[1])
             if rule[3] != 'any':
                 rule[3] = int(rule[3])
             if (len(rule) > 0) : # only make a rule if the line is not empty
                 self.AddRule(rule[0], rule[1], rule[2], rule[3])
-                print "Adding rule for: <",rule,">"
+                print "__init__():  Adding rule for: <",rule,">"
                 #config.append(rule)
             if (False):
-                print config   # for everline in config file
+                print "__init__(): \n", config   # for everline in config file
     
         # 0.0.0.0/0 is the wildcard for the ANY IP address match
         # can add rules hardcoded 
 #        self.AddRule('10.0.0.5',5555,'any','any')
-        print self.firewall
+        print "__init__(): \n", self.firewall
         self.update_policy()
 
         
     def AddRule(self, ip1, port1, ip2, port2):
         self.firewall[(ip1, port1, ip2, port2)] = True
-        print "Adding Firewall rule in %s:%s -  %s:%s" % (ip1 , port1 , ip2 , port2)
+        print "AddRule(): Adding Firewall rule in %s:%s -  %s:%s" % (ip1 , port1 , ip2 , port2)
 
     def clean_ip (cidrAddress):
         """
@@ -86,7 +86,7 @@ class firewall(DynamicPolicy):
                 newpolicy = newpolicy & match(dstport=port2)
 
             # join with the old policy
-            self.policy = union([ newpolicy >> fwd(OFPP_NORMAL) + self.policy  ])
+            self.policy = (newpolicy >> fwd(OFPP_NORMAL)) + self.policy
 
         # add rules to the policy to explicitly allow ICMP and ARP traffic to passthrough
         self.policy =  union([
@@ -96,14 +96,13 @@ class firewall(DynamicPolicy):
             (match(protocol=pkt.arp.REV_REQUEST, ethtype=pkt.ethernet.ARP_TYPE) >>  fwd(OFPP_NORMAL))+
             (match(protocol=pkt.arp.REV_REPLY,   ethtype=pkt.ethernet.ARP_TYPE) >>  fwd(OFPP_NORMAL))+
             self.policy ])   
-        print self.policy
+        print "update_policy(): \n", self.policy
 
 def main(configuration=""):
     # read config file
-    print configuration
+    print "main(): \n", configuration
     global config
     config=configuration
     # call AddRule(dstip, dstport, srcport, srcport)
-    print firewall()
     return firewall() #mac_learner()
     # was flood()
