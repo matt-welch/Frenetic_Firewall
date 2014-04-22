@@ -8,15 +8,55 @@ from pox.lib.addresses import *
 
 from pyretic.lib.corelib import *
 from pyretic.lib.std import *
+from pyretic.lib.query import *
 from pyretic.modules.mac_learner import mac_learner
 import pox.lib.packet as pkt
 
 OFPP_NORMAL = 0xfffa    # Process with normal L2/L3 switching.
+
+firewallDict = {} 
+
+def ReactiveRuleQuery():
+    print "ReactiveRuleQuery first"
+    query = packets(limit=1,group_by=['srcip'])#,'srcport','dstip','dstport'
+    print query
+    match(protocol=pkt.ipv4.TCP_PROTOCOL) >> query
+    query.register_callback(AddReactiveRule)
+    print "ReactiveRuleQuery second"
+    return query
+
+def AddReactiveRule(pkt_in):
+     #if rule in config file
+     print "AddReactiveRule(): pkt_in=\n",pkt_in
+     global firewallDict
+     flag = False
+     packet_proto = pkt_in['protocol']
+     print "AddReactiveRule(): Packet protocol = ",packet_proto
+     if packet_proto == pkt.ipv4.TCP_PROTOCOL:
+
+         for rule in firewallDict.keys():
+             #if pkt_in['srcip'] == rule[0] or rule[0] == 'any':
+             #    if pkt_in['srcport'] == rule[1] or rule[1] == 'any':
+             #        if pkt_in['dstip'] == rule[2] or rule[2] == 'any':
+             #            if pkt_in['dstport'] == rule[3] or rule[3] == 'any':
+             #                flag = True
+                             break
+         if flag == True:
+             # add the reactive rulpv4.TCP_PROTOCOL
+             # e.g. 10.0.0.7:35463 --> 10.0.0.6:6666
+             # ret: 10.0.0.6:6666 --> 10.0.0.7:35463
+             print "AddReactiveRule(): adding rule for : ", pkt_in
+             self.policy = ( match(srcip=pkt_in['dstip'],srcport=pkt_in['dstport'],
+                 dstip=pkt_in['srcip'],dstport=pkt_in['srcport'],
+                 protocol=pkt.ipv4.TCP_PROTOCOL, ethtype=pkt.ethernet.IP_TYPE) >> 
+                 fwd(OFPP_NORMAL) ) + self_policy  
+
 class firewall(DynamicPolicy):
     def __init__(self):
         #Initialize the firewall
         print "__init__(): initializing firewall"
-        self.firewall = {}
+        global firewallDict
+#        firewallDict = {}
         super(firewall,self).__init__(true)
 
         # push rules from the configuration file
@@ -39,12 +79,13 @@ class firewall(DynamicPolicy):
         # 0.0.0.0/0 is the wildcard for the ANY IP address match
         # can add rules hardcoded 
 #        self.AddRule('10.0.0.5',5555,'any','any')
-        print "__init__(): \n", self.firewall
+        print "__init__(): \n", firewallDict
         self.update_policy()
 
-        
+
     def AddRule(self, ip1, port1, ip2, port2):
-        self.firewall[(ip1, port1, ip2, port2)] = True
+        global firewallDict
+        firewallDict[(ip1, port1, ip2, port2)] = True
         print "AddRule(): Adding Firewall rule in %s:%s -  %s:%s" % (ip1 , port1 , ip2 , port2)
 
     def clean_ip (cidrAddress):
@@ -68,10 +109,11 @@ class firewall(DynamicPolicy):
             return strAddress[0]
     
     def update_policy(self):
+        global firewallDict
         # create a prototype rule specifying the ethertype and TCP
         protomatch = match(protocol=pkt.ipv4.TCP_PROTOCOL ) & match(ethtype=pkt.ethernet.IP_TYPE)
         # loop through the rules in the dictionary, unioning them with the existing policy
-        for (ip1, port1, ip2, port2) in self.firewall.keys(): 
+        for (ip1, port1, ip2, port2) in firewallDict.keys(): 
             # new policy is initially a basic policy matching only on protocols
             newpolicy = protomatch
 
@@ -104,5 +146,5 @@ def main(configuration=""):
     global config
     config=configuration
     # call AddRule(dstip, dstport, srcport, srcport)
-    return firewall() #mac_learner()
+    return ( firewall() ) #+ ReactiveRuleQuery() )#mac_learner()
     # was flood()
