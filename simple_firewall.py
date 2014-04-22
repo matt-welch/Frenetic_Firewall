@@ -11,8 +11,8 @@ from pyretic.lib.std import *
 from pyretic.modules.mac_learner import mac_learner
 import pox.lib.packet as pkt
 
+OFPP_NORMAL = 0xfffa    # Process with normal L2/L3 switching.
 class firewall(DynamicPolicy):
-
     def __init__(self):
         #Initialize the firewall
         print "initializing firewall"
@@ -86,14 +86,15 @@ class firewall(DynamicPolicy):
                 newpolicy = newpolicy & match(dstport=port2)
 
             # join with the old policy
-            self.policy = union([ newpolicy + self.policy ])
+            self.policy = union([ newpolicy >> fwd(OFPP_NORMAL) + self.policy  ])
 
         # add rules to the policy to explicitly allow ICMP and ARP traffic to passthrough
-        self.policy =  union([(match(protocol=pkt.ipv4.ICMP_PROTOCOL, ethtype=pkt.ethernet.IP_TYPE)) + 
-            (match(protocol=pkt.arp.REQUEST,     ethtype=pkt.ethernet.ARP_TYPE)) +
-            (match(protocol=pkt.arp.REPLY,       ethtype=pkt.ethernet.ARP_TYPE)) +
-            (match(protocol=pkt.arp.REV_REQUEST, ethtype=pkt.ethernet.ARP_TYPE)) +
-            (match(protocol=pkt.arp.REV_REPLY,   ethtype=pkt.ethernet.ARP_TYPE)) +
+        self.policy =  union([
+            (match(protocol=pkt.ipv4.ICMP_PROTOCOL,ethtype=pkt.ethernet.IP_TYPE) >> fwd(OFPP_NORMAL)) + 
+            (match(protocol=pkt.arp.REQUEST,     ethtype=pkt.ethernet.ARP_TYPE) >>  fwd(OFPP_NORMAL))+
+            (match(protocol=pkt.arp.REPLY,       ethtype=pkt.ethernet.ARP_TYPE) >>  fwd(OFPP_NORMAL))+
+            (match(protocol=pkt.arp.REV_REQUEST, ethtype=pkt.ethernet.ARP_TYPE) >>  fwd(OFPP_NORMAL))+
+            (match(protocol=pkt.arp.REV_REPLY,   ethtype=pkt.ethernet.ARP_TYPE) >>  fwd(OFPP_NORMAL))+
             self.policy ])   
         print self.policy
 
@@ -103,5 +104,6 @@ def main(configuration=""):
     global config
     config=configuration
     # call AddRule(dstip, dstport, srcport, srcport)
-    return firewall() >> fwd(2) #mac_learner()
+    print firewall()
+    return firewall() #mac_learner()
     # was flood()
