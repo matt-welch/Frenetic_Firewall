@@ -14,48 +14,64 @@ import pox.lib.packet as pkt
 
 OFPP_NORMAL = 0xfffa    # Process with normal L2/L3 switching.
 
-firewallDict = {} 
-class ReactiveRuleQuery(DynamicPolicy):
-    def AddReactiveRule(self,pkt_in):
-        #if rule in config file
-        print "DDEBUG: AddReactiveRule(): pkt_in=\n",pkt_in
-        global firewallDict
-        flag = False
-        packet_proto = pkt_in['protocol']
-        print "DDEBUG: AddReactiveRule(): Packet protocol = ",packet_proto
-        if packet_proto == pkt.ipv4.TCP_PROTOCOL:
-            for rule in firewallDict.keys():
-                if pkt_in['srcip'] == rule[0] or rule[0] == 'any':
-                    print "SRCIP matches ",rule[0]
-                    if pkt_in['srcport'] == rule[1] or rule[1] == 'any':
-                        print "SRCPORT matches ",rule[1]
-                        if pkt_in['dstip'] == rule[2] or rule[2] == 'any':
-                            print "DSTIP matches ",rule[2]
-                            if pkt_in['dstport'] == rule[3] or rule[3] == 'any':
-                                print "DSTPORT matches ",rule[3]
-                                flag = True
-                                break
-        if flag == True:
-            # add the reactive rulpv4.TCP_PROTOCOL
-            # e.g. 10.0.0.7:35463 --> 10.0.0.6:6666
-            # ret: 10.0.0.6:6666 --> 10.0.0.7:35463
-            print "DDEBUG: AddReactiveRule(): adding rule for : ", pkt_in
-            self.policy = ( match(srcip=pkt_in['dstip'],srcport=pkt_in['dstport'],
-                dstip=pkt_in['srcip'],dstport=pkt_in['srcport'],
-                protocol=pkt.ipv4.TCP_PROTOCOL, ethtype=pkt.ethernet.IP_TYPE) >> 
-                fwd(OFPP_NORMAL) ) + self.policy
+firewallDict = {}
+reactivePolicy = DynamicPolicy()
+#class ReactiveRuleQuery(DynamicPolicy):
+def AddReactiveRule(pkt_in):
+    #if rule in config file
+    print "DDEBUG: AddReactiveRule(): pkt_in=\n",pkt_in
+    global firewallDict
+    global reactivePolicy
+    flag = False
+    packet_proto = pkt_in['protocol']
+    print "DDEBUG: AddReactiveRule(): Packet protocol = ",packet_proto
+    if packet_proto == pkt.ipv4.TCP_PROTOCOL:
+        print "DDEBUG: AddReactiveRule(): inside if-then"
+        for rule in firewallDict.keys():
+            srcip, srcport, dstip, dstport = rule
+            print "DDEBUG: AddReactiveRule(): rule = :",rule
+            if str(pkt_in['srcip']) == srcip or srcip == 'any':
+                print "SRCIP matches ",srcip
+                if str(pkt_in['srcport']) == srcport or srcport == 'any':
+                    print "SRCPORT matches ",srcport
+                    if str(pkt_in['dstip']) == dstip or dstip == 'any':
+                        print "DSTIP matches ",dstip
+                        if str(pkt_in['dstport']) == dstport or dstport == 'any':
+                            print "DSTPORT matches ",dstport
+                            flag = True
+                            break
+    print flag
+    if  flag == True:
+        # add the reactive rulpv4.TCP_PROTOCOL
+        # e.g. 10.0.0.7:35463 --> 10.0.0.6:6666
+        # ret: 10.0.0.6:6666 --> 10.0.0.7:35463
+        print "DDEBUG: AddReactiveRule(): adding rule for : ", pkt_in
+        # TODO: reactive needs to install rules in both directions
+        # only installing in the reverse direction right now
+        reactivePolicy = ( match(srcip=pkt_in['dstip'],srcport=pkt_in['dstport'],
+            dstip=pkt_in['srcip'],dstport=pkt_in['srcport'],
+            protocol=pkt.ipv4.TCP_PROTOCOL, ethtype=pkt.ethernet.IP_TYPE) >> 
+            fwd(OFPP_NORMAL) ) + reactivePolicy
+        reactivePolicy = ( match(srcip=pkt_in['dstip'],srcport=pkt_in['dstport'],
+            dstip=pkt_in['srcip'],dstport=pkt_in['srcport'],
+            protocol=pkt.ipv4.TCP_PROTOCOL, ethtype=pkt.ethernet.IP_TYPE) >> 
+            fwd(OFPP_NORMAL) ) + reactivePolicy
+    print "DDEBUG: AddReactiveRule() complete"
+    return reactivePolicy
 
-    def __init__(self):
-        #Initialize the ReactiveRules
-        print "__init__(): initializing ReactiveRuleQuery"
 
-        self.query = packets(limit=1,group_by=['srcip','srcport','dstip','dstport'])#
-        print "QUERY::",self.query
-#        match(protocol=pkt.ipv4.TCP_PROTOCOL) >> query
-        self.query.register_callback(self.AddReactiveRule)
-        print "DDEBUG: ReactiveRuleQuery __init_() done"
-        super(ReactiveRuleQuery,self).__init__(true)
-        print "POLICY:", self.policy
+def ReactiveRuleQuery():
+#def __init__(self):
+    #Initialize the ReactiveRules
+    print "__init__(): initializing ReactiveRuleQuery"
+
+    query = packets(limit=1,group_by=['srcip','srcport','dstip','dstport'])#
+    print "QUERY::",query
+    match(protocol=pkt.ipv4.TCP_PROTOCOL) >> query
+    query.register_callback(AddReactiveRule)
+    print "DDEBUG: ReactiveRuleQuery __init_() done"
+   # super(ReactiveRuleQuery,self).__init__(true)
+    return query
 
 class firewall(DynamicPolicy):
     def __init__(self):
@@ -151,4 +167,4 @@ def main(configuration=""):
     print "main(): \n", configuration
     global config
     config=configuration
-    return ( firewall() +  (ReactiveRuleQuery()) )#match(protocol=pkt.ipv4.TCP_PROTOCOL) >> 
+    return ( firewall() + (match(protocol = pkt.ipv4.TCP_PROTOCOL) >> ReactiveRuleQuery()) )# 
