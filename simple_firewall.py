@@ -12,17 +12,23 @@ from pyretic.lib.query import *
 from pyretic.modules.mac_learner import mac_learner
 import pox.lib.packet as pkt
 
+import inspect
+
 OFPP_NORMAL = 0xfffa    # Process with normal L2/L3 switching.
+DEBUGMODE=True
 
 firewallDict = {}
 reactivePolicy = DynamicPolicy()
 #class ReactiveRuleQuery(DynamicPolicy):
 def AddReactiveRule(pkt_in):
+    #DEBUGING: 
+    print inspect.stack()
     #if rule in config file
     print "DDEBUG: AddReactiveRule(): pkt_in=\n",pkt_in
+    global DEBUGMODE
     global firewallDict
     global reactivePolicy
-    flag = False
+    flag = True
     packet_proto = pkt_in['protocol']
     print "DDEBUG: AddReactiveRule(): Packet protocol = ",packet_proto
     if packet_proto == pkt.ipv4.TCP_PROTOCOL:
@@ -30,6 +36,13 @@ def AddReactiveRule(pkt_in):
         for rule in firewallDict.keys():
             srcip, srcport, dstip, dstport = rule
             print "DDEBUG: AddReactiveRule(): rule = :",rule
+            if DEBUGMODE:
+                print type(str(pkt_in['srcip'])), str(pkt_in['srcip'])
+                print type(pkt_in['srcport']), pkt_in['srcport']
+                print type(pkt_in['dstip']), pkt_in['dstip']
+                print type(pkt_in['dstport']), pkt_in['dstport']
+                print type(srcip), srcip
+            # attempt tp match on a forward rule
             if str(pkt_in['srcip']) == srcip or srcip == 'any':
                 print "SRCIP matches ",srcip
                 if str(pkt_in['srcport']) == srcport or srcport == 'any':
@@ -46,16 +59,11 @@ def AddReactiveRule(pkt_in):
         # e.g. 10.0.0.7:35463 --> 10.0.0.6:6666
         # ret: 10.0.0.6:6666 --> 10.0.0.7:35463
         print "DDEBUG: AddReactiveRule(): adding rule for : ", pkt_in
-        # TODO: reactive needs to install rules in both directions
-        # only installing in the reverse direction right now
+        # install "reverse" rule, i.e. B->A
         reactivePolicy = ( match(srcip=pkt_in['dstip'],srcport=pkt_in['dstport'],
             dstip=pkt_in['srcip'],dstport=pkt_in['srcport'],
             protocol=pkt.ipv4.TCP_PROTOCOL, ethtype=pkt.ethernet.IP_TYPE) >> 
-            fwd(OFPP_NORMAL) ) + reactivePolicy
-        reactivePolicy = ( match(srcip=pkt_in['dstip'],srcport=pkt_in['dstport'],
-            dstip=pkt_in['srcip'],dstport=pkt_in['srcport'],
-            protocol=pkt.ipv4.TCP_PROTOCOL, ethtype=pkt.ethernet.IP_TYPE) >> 
-            fwd(OFPP_NORMAL) ) + reactivePolicy
+            xfwd(OFPP_NORMAL) ) + reactivePolicy
     print "DDEBUG: AddReactiveRule() complete"
     return reactivePolicy
 
@@ -67,7 +75,7 @@ def ReactiveRuleQuery():
 
     query = packets(limit=1,group_by=['srcip','srcport','dstip','dstport'])#
     print "QUERY::",query
-    match(protocol=pkt.ipv4.TCP_PROTOCOL) >> query
+    match(protocol=pkt.ipv4.TCP_PROTOCOL, ethtype=pkt.ethernet.IP_TYPE) >> query
     query.register_callback(AddReactiveRule)
     print "DDEBUG: ReactiveRuleQuery __init_() done"
    # super(ReactiveRuleQuery,self).__init__(true)
@@ -150,15 +158,15 @@ class firewall(DynamicPolicy):
                 newpolicy = newpolicy & match(dstport=port2)
 
             # join with the old policy
-            self.policy = (newpolicy >> fwd(OFPP_NORMAL)) + self.policy
+            self.policy = (newpolicy >> xfwd(OFPP_NORMAL)) + self.policy
 
         # add rules to the policy to explicitly allow ICMP and ARP traffic to passthrough
         self.policy =  union([
-            (match(protocol=pkt.ipv4.ICMP_PROTOCOL,ethtype=pkt.ethernet.IP_TYPE) >> fwd(OFPP_NORMAL)) + 
-            (match(protocol=pkt.arp.REQUEST,     ethtype=pkt.ethernet.ARP_TYPE) >>  fwd(OFPP_NORMAL))+
-            (match(protocol=pkt.arp.REPLY,       ethtype=pkt.ethernet.ARP_TYPE) >>  fwd(OFPP_NORMAL))+
-            (match(protocol=pkt.arp.REV_REQUEST, ethtype=pkt.ethernet.ARP_TYPE) >>  fwd(OFPP_NORMAL))+
-            (match(protocol=pkt.arp.REV_REPLY,   ethtype=pkt.ethernet.ARP_TYPE) >>  fwd(OFPP_NORMAL))+
+            (match(protocol=pkt.ipv4.ICMP_PROTOCOL,ethtype=pkt.ethernet.IP_TYPE) >> xfwd(OFPP_NORMAL)) + 
+            (match(protocol=pkt.arp.REQUEST,     ethtype=pkt.ethernet.ARP_TYPE) >>  xfwd(OFPP_NORMAL))+
+            (match(protocol=pkt.arp.REPLY,       ethtype=pkt.ethernet.ARP_TYPE) >>  xfwd(OFPP_NORMAL))+
+            (match(protocol=pkt.arp.REV_REQUEST, ethtype=pkt.ethernet.ARP_TYPE) >>  xfwd(OFPP_NORMAL))+
+            (match(protocol=pkt.arp.REV_REPLY,   ethtype=pkt.ethernet.ARP_TYPE) >>  xfwd(OFPP_NORMAL))+
             self.policy ])   
         print "update_policy(): \n", self.policy
 
@@ -166,5 +174,6 @@ def main(configuration=""):
     # read config file
     print "main(): \n", configuration
     global config
+    global reactivePolicy
     config=configuration
-    return ( firewall() + (match(protocol = pkt.ipv4.TCP_PROTOCOL) >> ReactiveRuleQuery()) )# 
+    return( firewall() + (match(protocol = pkt.ipv4.TCP_PROTOCOL) >> ReactiveRuleQuery()) + reactivePolicy  )# 
