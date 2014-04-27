@@ -37,20 +37,19 @@ class ReactiveRuleQuery(DynamicPolicy):
                 srcip, srcport, dstip, dstport = rule
                 print "DDEBUG: AddReactiveRule(): rule = :",rule
                 if DEBUGMODE:
-                    print type(str(pkt_in['srcip'])), str(pkt_in['srcip'])
-                    print type(pkt_in['srcport']), pkt_in['srcport']
-                    print type(pkt_in['dstip']), pkt_in['dstip']
-                    print type(pkt_in['dstport']), pkt_in['dstport']
-                    print type(srcip), srcip
-                # attempt tp match on a forward rule
-                if str(pkt_in['srcip']) == srcip or srcip == 'any':
-                    print "SRCIP matches ",srcip
-                    if str(pkt_in['srcport']) == srcport or srcport == 'any':
-                        print "SRCPORT matches ",srcport
-                        if str(pkt_in['dstip']) == dstip or dstip == 'any':
-                            print "DSTIP matches ",dstip
-                            if str(pkt_in['dstport']) == dstport or dstport == 'any':
-                                print "DSTPORT matches ",dstport
+                    print "srcip:",type(str(pkt_in['srcip'])),"<",str(pkt_in['srcip']),">" 
+                    print "srcport:",type(pkt_in['srcport']), "<",pkt_in['srcport'],">"
+                    print "dstip:",type(str(pkt_in['dstip'])),"<",str(pkt_in['dstip']),">"
+                    print "dstport:",type(pkt_in['dstport']), "<",pkt_in['dstport'],">"
+                # attempt to match on a forward rule
+                if str(pkt_in['srcip']) == dstip or dstip == 'any':
+                    print "Reverse Flow DSTIP matches ",dstip
+                    if pkt_in['srcport'] == dstport or dstport == 'any':
+                        print "Reverse Flow DSTPORT matches ",dstport
+                        if str(pkt_in['dstip']) == srcip or srcip == 'any':
+                            print "Reverse Flow SRCIP matches ",srcip
+                            if pkt_in['dstport'] == srcport or srcport == 'any':
+                                print "Reverse Flow SRCPORT matches ",srcport
                                 flag = True
                                 break
         print flag
@@ -59,9 +58,9 @@ class ReactiveRuleQuery(DynamicPolicy):
             # e.g. 10.0.0.7:35463 --> 10.0.0.6:6666
             # ret: 10.0.0.6:6666 --> 10.0.0.7:35463
             print "DDEBUG: AddReactiveRule(): adding rule for : ", pkt_in
-            # install "reverse" rule, i.e. B->A
-            self.policy = ( match(srcip=pkt_in['dstip'],srcport=pkt_in['dstport'],
-                dstip=pkt_in['srcip'],dstport=pkt_in['srcport'],
+            # install "reverse" rule, i.e. B->A since the forward flow is already installed
+            self.policy = ( match(srcip=pkt_in['srcip'],srcport=pkt_in['srcport'],
+                dstip=pkt_in['dstip'],dstport=pkt_in['dstport'],
                 protocol=pkt.ipv4.TCP_PROTOCOL, ethtype=pkt.ethernet.IP_TYPE) >> 
                 xfwd(OFPP_NORMAL) ) + self.policy
         print "DDEBUG: AddReactiveRule() complete"
