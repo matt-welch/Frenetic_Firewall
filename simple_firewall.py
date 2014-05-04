@@ -11,17 +11,22 @@ from pyretic.lib.std import *
 from pyretic.lib.query import *
 from pyretic.modules.mac_learner import mac_learner
 import pox.lib.packet as pkt
+import time
 
 import inspect
 
 OFPP_NORMAL = 0xfffa    # Process with normal L2/L3 switching.
-DEBUGMODE=True
+DEBUGMODE=False
 
 firewallDict = {}
 #reactivePolicy = DynamicPolicy()
 class ReactiveRuleQuery(DynamicPolicy):
     def AddReactiveRule(self,pkt_in):
         #DEBUGING: 
+        starttime = time.time()
+        print "DDEBUG: AddReactiveRule() starttime: %f " % starttime
+        print time.asctime( time.localtime(starttime) )
+
         #print inspect.stack()
         #if rule in config file
         print "DDEBUG: AddReactiveRule(): pkt_in=\n",pkt_in
@@ -42,14 +47,14 @@ class ReactiveRuleQuery(DynamicPolicy):
                     print "dstip:",type(str(pkt_in['dstip'])),"<",str(pkt_in['dstip']),">"
                     print "dstport:",type(pkt_in['dstport']), "<",pkt_in['dstport'],">"
                 # attempt to match on a forward rule
-                if str(pkt_in['srcip']) == dstip or dstip == 'any':
-                    print "Reverse Flow DSTIP matches ",dstip
-                    if pkt_in['srcport'] == dstport or dstport == 'any':
-                        print "Reverse Flow DSTPORT matches ",dstport
-                        if str(pkt_in['dstip']) == srcip or srcip == 'any':
-                            print "Reverse Flow SRCIP matches ",srcip
-                            if pkt_in['dstport'] == srcport or srcport == 'any':
-                                print "Reverse Flow SRCPORT matches ",srcport
+                if str(pkt_in['srcip']) == srcip or srcip == 'any':
+                    print "SRCIP matches ",srcip
+                    if pkt_in['srcport'] == srcport or srcport == 'any':
+                        print "SRCPORT matches ",srcport
+                        if str(pkt_in['dstip']) == dstip or dstip == 'any':
+                            print "DSTIP matches ",dstip
+                            if pkt_in['dstport'] == dstport or dstport == 'any':
+                                print "DSTPORT matches ",dstport
                                 flag = True
                                 break
         print flag
@@ -57,12 +62,16 @@ class ReactiveRuleQuery(DynamicPolicy):
             # add the reactive rulpv4.TCP_PROTOCOL
             # e.g. 10.0.0.7:35463 --> 10.0.0.6:6666
             # ret: 10.0.0.6:6666 --> 10.0.0.7:35463
-            print "DDEBUG: AddReactiveRule(): adding rule for : ", pkt_in
+            print "DDEBUG: AddReactiveRule(): adding reverse rule for : ", pkt_in
             # install "reverse" rule, i.e. B->A since the forward flow is already installed
-            self.policy = ( match(srcip=pkt_in['srcip'],srcport=pkt_in['srcport'],
-                dstip=pkt_in['dstip'],dstport=pkt_in['dstport'],
+            self.policy = ( match(srcip=pkt_in['dstip'],srcport=pkt_in['dstport'],
+                dstip=pkt_in['srcip'],dstport=pkt_in['srcport'],
                 protocol=pkt.ipv4.TCP_PROTOCOL, ethtype=pkt.ethernet.IP_TYPE) >> 
                 xfwd(OFPP_NORMAL) ) + self.policy
+        endtime = time.time()
+        print "DDEBUG: AddReactiveRule() endtime: %f " % endtime
+        print time.asctime( time.localtime(endtime) )
+        print "DDEBUG: elapsed time = ",endtime-starttime
         print "DDEBUG: AddReactiveRule() complete"
         #return reactivePolicy
     
